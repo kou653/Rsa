@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostCrypt — Poste Client de Roxane (Messagerie Anonyme RSA)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <!-- Navigation Bar -->
+    <header class="navbar">
+        <div class="logo">
+            <div class="logo-icon">
+                <i class="fa-solid fa-user-secret"></i>
+            </div>
+            <div class="logo-text">
+                <span class="brand-name">GhostCrypt</span>
+                <span class="user-pill"><i class="fa-solid fa-gem"></i> Poste Roxane</span>
+            </div>
+        </div>
+
+        <nav class="nav-links">
+            <button class="nav-btn active" id="btn-tab-home" onclick="changerOnglet('home')">
+                <i class="fa-solid fa-house"></i> Accueil
+            </button>
+            <button class="nav-btn" id="btn-tab-chat" onclick="changerOnglet('chat')">
+                <i class="fa-solid fa-comments"></i> Chat avec Muriel
+                <span class="chat-counter" id="unread-count">0</span>
+            </button>
+            <button class="nav-btn" id="btn-tab-config" onclick="changerOnglet('config')">
+                <i class="fa-solid fa-sliders"></i> Connexion Distante
+            </button>
+            <button class="nav-btn" id="btn-tab-keys" onclick="changerOnglet('keys')">
+                <i class="fa-solid fa-key"></i> Clés RSA
+            </button>
+        </nav>
+
+        <div class="status-indicator">
+            <span class="pulse-dot" id="status-dot"></span>
+            <span class="status-text" id="status-label">Prêt</span>
+        </div>
+    </header>
+
+    <main class="main-content">
+
+        <!-- SECTION 1: ACCUEIL HERO -->
+        <section id="section-home" class="page-section active fade-in">
+            <div class="hero-container">
+                <div class="hero-badge">
+                    <i class="fa-solid fa-shield-halved"></i> Poste Client Dédié — Roxane
+                </div>
+                <h1 class="hero-title">
+                    Canal Anonyme Chiffré.<br>
+                    <span class="gradient-text">Communiquez en toute sécurité avec Muriel.</span>
+                </h1>
+                <p class="hero-subtitle">
+                    Cette interface Web remplace l'ancienne fenêtre Tkinter de votre machine. 
+                    Vos messages sont chiffrés localement avec la <strong>clé publique de Muriel (RSA-2048 OAEP)</strong>,
+                    puis transmis directement à sa machine distante.
+                </p>
+
+                <div class="hero-actions">
+                    <button class="btn-primary" onclick="changerOnglet('chat')">
+                        <i class="fa-solid fa-paper-plane"></i> Ouvrir le Chat Sécurisé
+                    </button>
+                    <button class="btn-secondary" onclick="changerOnglet('config')">
+                        <i class="fa-solid fa-gear"></i> Paramétrer l'adresse de Muriel
+                    </button>
+                </div>
+
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="f-icon"><i class="fa-solid fa-lock"></i></div>
+                        <h3>Chiffrement Local 2048 bits</h3>
+                        <p>Aucun texte clair ne sort de cette machine. Tout message est verrouillé avec la clé publique de Muriel avant son expédition.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="f-icon"><i class="fa-solid fa-network-wired"></i></div>
+                        <h3>Liaison Distante (ngrok / HTTP)</h3>
+                        <p>Connexion fluide vers l'adresse serveur de la machine de Muriel sans quitter votre navigateur.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="f-icon"><i class="fa-solid fa-shield-virus"></i></div>
+                        <h3>Protection de votre clé privée</h3>
+                        <p>Votre clé privée <code>roxane_privee.pem</code> reste sur votre poste pour déchiffrer les réponses que Muriel vous renvoie.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: CHAT ROXANE -> MURIEL -->
+        <section id="section-chat" class="page-section">
+            <div class="chat-app-wrapper">
+                
+                <!-- Sidebar d'information -->
+                <aside class="chat-sidebar">
+                    <div class="profile-card current-user-card">
+                        <div class="avatar avatar-roxane">
+                            <i class="fa-solid fa-gem"></i>
+                        </div>
+                        <div class="profile-info">
+                            <div class="profile-name">Roxane (Moi)</div>
+                            <div class="profile-state"><i class="fa-solid fa-circle"></i> Clé privée active</div>
+                        </div>
+                    </div>
+
+                    <div class="target-peer-card">
+                        <div class="peer-header">
+                            <span class="peer-title"><i class="fa-solid fa-satellite-dish"></i> Correspondante Distante</span>
+                        </div>
+                        <div class="peer-body">
+                            <div class="peer-avatar">
+                                <i class="fa-solid fa-user-secret"></i>
+                            </div>
+                            <div class="peer-details">
+                                <div class="peer-name">Muriel</div>
+                                <div class="peer-url-badge" id="sidebar-server-url">https://...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="crypto-meta-panel">
+                        <h4><i class="fa-solid fa-shield-cat"></i> Chiffrement Actif</h4>
+                        <div class="meta-item">
+                            <span>Algorithme :</span>
+                            <strong class="tag-green">RSA-2048 / OAEP</strong>
+                        </div>
+                        <div class="meta-item">
+                            <span>Clé Muriel :</span>
+                            <span class="mono-text" id="sidebar-key-status">Vérification...</span>
+                        </div>
+                        <div class="meta-item">
+                            <span>Capacité max :</span>
+                            <span>190 octets / msg</span>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-footer">
+                        <button class="btn-clear-chat" onclick="reinitialiserChat()">
+                            <i class="fa-solid fa-trash-can"></i> Effacer l'affichage
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- Zone principale d'échanges -->
+                <div class="chat-main-area">
+                    <div class="chat-header">
+                        <div class="chat-header-title">
+                            <div class="user-badge">
+                                Conversation Sécurisée avec <strong>Muriel</strong>
+                            </div>
+                            <div class="chat-subinfo" id="chat-subinfo-target">
+                                Cible : chargement...
+                            </div>
+                        </div>
+                        <div class="chat-header-actions">
+                            <button class="btn-mode-inspect" id="btn-toggle-raw" onclick="basculerModeChiffre()">
+                                <i class="fa-solid fa-code"></i> <span id="label-inspect">Voir Trames Chiffrées</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="chat-messages-container" id="chat-messages">
+                        <div class="empty-state" id="empty-state">
+                            <div class="empty-icon"><i class="fa-solid fa-lock"></i></div>
+                            <h4>Aucun message dans cette session</h4>
+                            <p>Écrivez ci-dessous pour transmettre un message chiffré à la machine de Muriel.</p>
+                        </div>
+                    </div>
+
+                    <!-- Zone de rédaction du message -->
+                    <div class="chat-composer-wrapper">
+                        <div class="composer-toolbar">
+                            <span class="composer-info">
+                                Chiffrement automatique avec la clé publique de <strong>Muriel</strong>
+                            </span>
+                            <span class="byte-counter" id="byte-counter">0 / 190 octets</span>
+                        </div>
+                        <div class="chat-input-bar">
+                            <textarea 
+                                id="message-input" 
+                                placeholder="Tapez votre message pour Muriel..." 
+                                rows="1"
+                                onkeydown="handleKeyPress(event)"
+                                oninput="actualiserCompteurOctets(this.value)"
+                            ></textarea>
+                            <button class="btn-send" onclick="envoyerMessage()" title="Chiffrer et envoyer à Muriel">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="composer-alert" id="composer-alert"></div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 3: CONFIGURATION DISTANTE (Machine de Muriel) -->
+        <section id="section-config" class="page-section">
+            <div class="config-container">
+                <div class="config-header">
+                    <h2><i class="fa-solid fa-sliders"></i> Configuration Machine Distante</h2>
+                    <p>Définissez l'adresse réseau de la machine de Muriel et assurez-vous que sa clé publique est chargée.</p>
+                </div>
+
+                <div class="config-card">
+                    <div class="form-group">
+                        <label for="cfg-server-url">
+                            <i class="fa-solid fa-link"></i> 1. Adresse du serveur de Muriel (ex: URL ngrok fournie par Muriel) :
+                        </label>
+                        <input type="text" id="cfg-server-url" class="form-control" placeholder="https://xxxx-xxxx.ngrok-free.dev ou http://IP:PORT">
+                        <small class="form-help">Cette adresse est celle où tourne le serveur sur la machine de Muriel. Les messages y seront transmis en HTTP POST sur <code>/envoyer/muriel</code>.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <i class="fa-solid fa-file-shield"></i> 2. Clé publique de Muriel (Fichier .pem) :
+                        </label>
+                        <div class="file-upload-box">
+                            <div id="cfg-cle-status" class="cle-status-badge">Vérification de muriel_publique.pem...</div>
+                            <p class="file-upload-help">Si vous avez reçu un nouveau fichier de clé de Muriel, collez son contenu ci-dessous ou importez-le :</p>
+                            <textarea id="cfg-cle-text" class="pem-textarea" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="config-actions">
+                        <button class="btn-primary" onclick="enregistrerConfig()">
+                            <i class="fa-solid fa-floppy-disk"></i> Enregistrer les paramètres
+                        </button>
+                        <span id="config-save-msg" class="save-msg"></span>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <div>
+                        <strong>Comment Muriel vous répond ?</strong> Si Muriel veut vous transmettre des messages en retour vers votre machine, donnez-lui votre propre URL (votre adresse IP ou votre lien ngrok pointant sur le port 5000) et votre clé publique (visible dans l'onglet "Clés RSA").
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 4: TROUSSEAU DE CLES RSA -->
+        <section id="section-keys" class="page-section">
+            <div class="keys-container">
+                <div class="keys-header">
+                    <h2><i class="fa-solid fa-key"></i> Clé Publique de Roxane</h2>
+                    <p>Voici votre clé publique. Transmettez-la à Muriel pour qu'elle puisse chiffrer les réponses qu'elle vous envoie.</p>
+                </div>
+
+                <div class="single-key-wrapper">
+                    <div class="key-card">
+                        <div class="key-card-header">
+                            <div class="key-role">
+                                <i class="fa-solid fa-gem text-purple"></i> Ma Clé Publique (Roxane)
+                            </div>
+                            <span class="key-badge">RSA-2048 PKCS8</span>
+                        </div>
+                        <p class="key-desc">À donner à Muriel sur son autre machine :</p>
+                        <pre class="key-display" id="key-roxane-display">Chargement...</pre>
+                        <button class="btn-copy" onclick="copierCleRoxane()">
+                            <i class="fa-regular fa-copy"></i> Copier ma clé publique
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
