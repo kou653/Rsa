@@ -152,18 +152,13 @@ function gererFichierChoisi(e) {
     }
 
     const alertBox = document.getElementById('composer-alert');
-    alertBox.innerText = `Chiffrement hybride et envoi de "${file.name}" (${formaterTaille(file.size)})...`;
+    alertBox.innerText = `Chiffrement et expédition de "${file.name}" (${formaterTaille(file.size)})...`;
     alertBox.style.color = '#38bdf8';
 
     const reader = new FileReader();
     reader.onload = function(evt) {
-        const arrayBuffer = evt.target.result;
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        const b64 = btoa(binary);
+        const fullDataUrl = evt.target.result;
+        const b64 = fullDataUrl.split(',')[1] || '';
 
         socket.emit('envoyer_fichier_a_roxane', {
             nom_fichier: file.name,
@@ -174,7 +169,7 @@ function gererFichierChoisi(e) {
         e.target.value = '';
         setTimeout(() => { alertBox.innerText = ''; }, 3000);
     };
-    reader.readAsArrayBuffer(file);
+    reader.readAsDataURL(file);
 }
 
 function formaterTaille(octets) {
@@ -275,7 +270,7 @@ function ajouterMessageAuDOM(msg) {
                         <span>${formaterTaille(msg.taille)}</span>
                     </div>
                 </div>
-                ${msg.data_url ? `<a href="${msg.data_url}" download="${echapperHtml(msg.nom_fichier)}" class="btn-download-file"><i class="fa-solid fa-download"></i> Télécharger le fichier déchiffré</a>` : `<span style="color:#f87171;">[Erreur déchiffrement]</span>`}
+                ${msg.data_url ? `<a href="${msg.data_url}" download="${echapperHtml(msg.nom_fichier)}" class="btn-download-file"><i class="fa-solid fa-download"></i> Télécharger le fichier déchiffré</a>` : `<span style="color:#f87171;"><i class="fa-solid fa-triangle-exclamation"></i> [Erreur déchiffrement: ${echapperHtml(msg.erreur || 'échec')}]</span>`}
             </div>
         `;
     } else {

@@ -152,7 +152,6 @@ function gererFichierChoisi(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Limite de sécurité raisonnable pour envoi WebSocket/HTTP direct (ex: 15 Mo)
     const MAX_MO = 15;
     if (file.size > MAX_MO * 1024 * 1024) {
         alert(`Le fichier est trop volumineux (max ${MAX_MO} Mo).`);
@@ -161,18 +160,14 @@ function gererFichierChoisi(e) {
     }
 
     const alertBox = document.getElementById('composer-alert');
-    alertBox.innerText = `Chiffrement hybride et envoi de "${file.name}" (${formaterTaille(file.size)})...`;
+    alertBox.innerText = `Chiffrement et expédition de "${file.name}" (${formaterTaille(file.size)})...`;
     alertBox.style.color = '#38bdf8';
 
     const reader = new FileReader();
     reader.onload = function(evt) {
-        const arrayBuffer = evt.target.result;
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        const b64 = btoa(binary);
+        const fullDataUrl = evt.target.result;
+        // Extraction propre du base64 quel que soit le type binaire (PDF, DOCX, image, zip...)
+        const b64 = fullDataUrl.split(',')[1] || '';
 
         socket.emit('envoyer_fichier_a_muriel', {
             nom_fichier: file.name,
@@ -183,7 +178,8 @@ function gererFichierChoisi(e) {
         e.target.value = '';
         setTimeout(() => { alertBox.innerText = ''; }, 3000);
     };
-    reader.readAsArrayBuffer(file);
+    // readAsDataURL est le standard navigateur le plus fiable pour encoder en Base64 sans corruptions binaires
+    reader.readAsDataURL(file);
 }
 
 function formaterTaille(octets) {
@@ -285,7 +281,7 @@ function ajouterMessageAuDOM(msg) {
                         <span>${formaterTaille(msg.taille)}</span>
                     </div>
                 </div>
-                ${msg.data_url ? `<a href="${msg.data_url}" download="${echapperHtml(msg.nom_fichier)}" class="btn-download-file"><i class="fa-solid fa-download"></i> Télécharger le fichier déchiffré</a>` : `<span style="color:#f87171;">[Erreur déchiffrement]</span>`}
+                ${msg.data_url ? `<a href="${msg.data_url}" download="${echapperHtml(msg.nom_fichier)}" class="btn-download-file"><i class="fa-solid fa-download"></i> Télécharger le fichier déchiffré</a>` : `<span style="color:#f87171;"><i class="fa-solid fa-triangle-exclamation"></i> [Erreur déchiffrement: ${echapperHtml(msg.erreur || 'échec')}]</span>`}
             </div>
         `;
     } else {

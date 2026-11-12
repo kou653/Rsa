@@ -115,6 +115,8 @@ def recevoir_de_roxane():
             succes = True
             erreur_desc = None
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             succes = False
             data_url = ""
             erreur_desc = str(e)
