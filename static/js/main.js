@@ -148,6 +148,51 @@ function actualiserCompteurOctets(valeur) {
     }
 }
 
+function gererFichierChoisi(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Limite de sécurité raisonnable pour envoi WebSocket/HTTP direct (ex: 15 Mo)
+    const MAX_MO = 15;
+    if (file.size > MAX_MO * 1024 * 1024) {
+        alert(`Le fichier est trop volumineux (max ${MAX_MO} Mo).`);
+        e.target.value = '';
+        return;
+    }
+
+    const alertBox = document.getElementById('composer-alert');
+    alertBox.innerText = `Chiffrement hybride et envoi de "${file.name}" (${formaterTaille(file.size)})...`;
+    alertBox.style.color = '#38bdf8';
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const arrayBuffer = evt.target.result;
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        const b64 = btoa(binary);
+
+        socket.emit('envoyer_fichier_a_muriel', {
+            nom_fichier: file.name,
+            type_mime: file.type || 'application/octet-stream',
+            contenu_b64: b64
+        });
+
+        e.target.value = '';
+        setTimeout(() => { alertBox.innerText = ''; }, 3000);
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function formaterTaille(octets) {
+    if (!octets) return '0 o';
+    if (octets < 1024) return octets + ' o';
+    if (octets < 1024 * 1024) return (octets / 1024).toFixed(1) + ' Ko';
+    return (octets / (1024 * 1024)).toFixed(2) + ' Mo';
+}
+
 function handleKeyPress(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -229,14 +274,32 @@ function ajouterMessageAuDOM(msg) {
     const messageRow = document.createElement('div');
     messageRow.className = `message-row ${isSent ? 'sent' : 'received'}`;
 
+    let contenuHtml = '';
+    if (msg.type === 'fichier') {
+        contenuHtml = `
+            <div class="file-message-card">
+                <div class="file-generic-preview">
+                    <i class="fa-solid fa-file-shield file-icon-big"></i>
+                    <div class="file-generic-meta">
+                        <strong>${echapperHtml(msg.nom_fichier)}</strong>
+                        <span>${formaterTaille(msg.taille)}</span>
+                    </div>
+                </div>
+                ${msg.data_url ? `<a href="${msg.data_url}" download="${echapperHtml(msg.nom_fichier)}" class="btn-download-file"><i class="fa-solid fa-download"></i> Télécharger le fichier déchiffré</a>` : `<span style="color:#f87171;">[Erreur déchiffrement]</span>`}
+            </div>
+        `;
+    } else {
+        contenuHtml = `<div class="bubble-text">${echapperHtml(msg.message_clair)}</div>`;
+    }
+
     messageRow.innerHTML = `
         <div class="message-meta">
             <strong>${msg.auteur}</strong> • <span>${msg.timestamp}</span> ${badgeStatus}
         </div>
         <div class="message-bubble">
-            <div class="bubble-text">${echapperHtml(msg.message_clair)}</div>
+            ${contenuHtml}
             <div class="cipher-badge ${afficherChiffre ? 'visible' : ''}">
-                <div class="cipher-tag"><i class="fa-solid fa-key"></i> RSA Base64 Chiffré :</div>
+                <div class="cipher-tag"><i class="fa-solid fa-key"></i> Chiffrement :</div>
                 <div>${msg.message_chiffre}</div>
             </div>
         </div>

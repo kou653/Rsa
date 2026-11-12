@@ -737,6 +737,113 @@ body {
     padding: 6px 0;
 }
 
+.btn-attach {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.btn-attach:hover {
+    background: rgba(192, 132, 252, 0.2);
+    color: var(--accent-purple);
+    border-color: var(--accent-purple);
+}
+
+/* CARTE DE FICHIER / IMAGE */
+.file-message-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 320px;
+}
+
+.file-img-preview {
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: #000;
+    max-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-img-preview img {
+    width: 100%;
+    height: auto;
+    max-height: 240px;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.file-img-preview img:hover {
+    transform: scale(1.02);
+}
+
+.file-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    gap: 8px;
+}
+
+.file-generic-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.file-icon-big {
+    font-size: 1.8rem;
+    color: var(--accent-cyan);
+}
+
+.file-generic-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+
+.file-generic-meta span {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.btn-download-file {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.btn-download-file:hover {
+    background: linear-gradient(135deg, #a855f7, #6366f1);
+}
+
 .btn-send {
     width: 42px;
     height: 42px;

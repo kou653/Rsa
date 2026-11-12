@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import base64
 import requests
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
@@ -13,7 +14,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 MAX_OCTETS = 190  # Limite RSA 2048 avec padding OAEP / SHA-256
 HEADERS = {"ngrok-skip-browser-warning": "1"}
 
-# Configuration par défaut
 CONFIG_FICHIER = "config_roxane.json"
 
 def charger_configuration():
@@ -39,8 +39,6 @@ if not (os.path.exists("roxane_privee.pem") and os.path.exists("roxane_publique.
     rsa_outils.sauver_cles(priv, "roxane")
 
 # Historique des messages locaux de Roxane (session)
-# Chaque item: { id, auteur, destinataire, message_clair, message_chiffre, timestamp, statut, type }
-# auteur: 'Roxane' (envoyé) ou 'Muriel' (reçu)
 messages_historique = []
 
 @app.route('/')
@@ -104,48 +102,86 @@ def upload_cle_muriel():
 
     return jsonify({"status": "ok", "message": "Clé publique de Muriel enregistrée avec succès."})
 
-# Endpoint pour recevoir un message chiffré provenant de la machine de Muriel
+# Endpoint pour recevoir texte ou fichier chiffré depuis la machine de Muriel
 @app.route('/recevoir', methods=['POST'])
 @app.route('/envoyer/roxane', methods=['POST'])
 def recevoir_de_muriel():
-    """
-    Endpoint HTTP que la machine distante de Muriel appelle pour déposer un message chiffré à destination de Roxane.
-    """
     data = request.get_json(silent=True) or {}
-    message_chiffre = data.get("message", "")
-    if not message_chiffre:
-        return jsonify({"erreur": "Paramètre 'message' manquant"}), 400
+    type_msg = data.get("type", "texte")
 
-    try:
-        # Roxane déchiffre avec sa propre clé privée
-        roxane_privee = rsa_outils.charger_privee("roxane_privee.pem")
-        clair = rsa_outils.dechiffrer(message_chiffre, roxane_privee)
-        succes = True
-    except Exception as e:
-        clair = f"[Erreur de déchiffrement avec la clé privée de Roxane : {e}]"
-        succes = False
+    if type_msg == "fichier":
+        # Traitement d'un fichier/photo chiffré
+        nom_fichier = data.get("nom_fichier", "fichier_recu")
+        type_mime = data.get("type_mime", "application/octet-stream")
+        cle_aes_chiffree = data.get("cle_aes_chiffree", "")
+        nonce = data.get("nonce", "")
+        donnees_chiffrees = data.get("donnees_chiffrees", "")
 
-    msg_obj = {
-        "id": len(messages_historique) + 1,
-        "auteur": "Muriel",
-        "destinataire": "Roxane",
-        "message_clair": clair,
-        "message_chiffre": message_chiffre,
-        "timestamp": time.strftime("%H:%M:%S"),
-        "statut": "reçu" if succes else "erreur",
-        "direction": "entrant"
-    }
-    messages_historique.append(msg_obj)
-    socketio.emit('nouveau_message', msg_obj)
+        if not (cle_aes_chiffree and nonce and donnees_chiffrees):
+            return jsonify({"erreur": "Charge chiffrée de fichier incomplète"}), 400
 
-    return jsonify({"status": "ok", "recu": True, "dechiffre": succes})
+        try:
+            roxane_privee = rsa_outils.charger_privee("roxane_privee.pem")
+            fichier_bytes = rsa_outils.dechiffrer_fichier(cle_aes_chiffree, nonce, donnees_chiffrees, roxane_privee)
+            data_url = f"data:{type_mime};base64,{base64.b64encode(fichier_bytes).decode()}"
+            succes = True
+            erreur_desc = None
+        except Exception as e:
+            succes = False
+            data_url = ""
+            erreur_desc = str(e)
+
+        msg_obj = {
+            "id": len(messages_historique) + 1,
+            "auteur": "Muriel",
+            "destinataire": "Roxane",
+            "type": "fichier",
+            "nom_fichier": nom_fichier,
+            "type_mime": type_mime,
+            "taille": len(base64.b64decode(donnees_chiffrees)) if donnees_chiffrees else 0,
+            "data_url": data_url,
+            "message_chiffre": f"[Clé AES chiffrée RSA-2048]: {cle_aes_chiffree[:40]}... (Payload AES-256-GCM)",
+            "timestamp": time.strftime("%H:%M:%S"),
+            "statut": "reçu" if succes else "erreur",
+            "erreur": erreur_desc,
+            "direction": "entrant"
+        }
+        messages_historique.append(msg_obj)
+        socketio.emit('nouveau_message', msg_obj)
+        return jsonify({"status": "ok", "recu": True, "dechiffre": succes})
+
+    else:
+        # Message texte classique
+        message_chiffre = data.get("message", "")
+        if not message_chiffre:
+            return jsonify({"erreur": "Paramètre 'message' manquant"}), 400
+
+        try:
+            roxane_privee = rsa_outils.charger_privee("roxane_privee.pem")
+            clair = rsa_outils.dechiffrer(message_chiffre, roxane_privee)
+            succes = True
+        except Exception as e:
+            clair = f"[Erreur de déchiffrement avec la clé privée de Roxane : {e}]"
+            succes = False
+
+        msg_obj = {
+            "id": len(messages_historique) + 1,
+            "auteur": "Muriel",
+            "destinataire": "Roxane",
+            "type": "texte",
+            "message_clair": clair,
+            "message_chiffre": message_chiffre,
+            "timestamp": time.strftime("%H:%M:%S"),
+            "statut": "reçu" if succes else "erreur",
+            "direction": "entrant"
+        }
+        messages_historique.append(msg_obj)
+        socketio.emit('nouveau_message', msg_obj)
+        return jsonify({"status": "ok", "recu": True, "dechiffre": succes})
 
 @socketio.on('envoyer_a_muriel')
 def handle_envoyer_a_muriel(data):
-    """
-    Roxane saisit un message -> chiffré avec la clé publique de Muriel
-    -> envoyé en HTTP POST vers la machine distante de Muriel.
-    """
+    """Envoi de texte simple (RSA-2048 OAEP direct)."""
     texte = (data.get("texte") or "").strip()
     if not texte:
         emit('erreur', {"message": "Le message ne peut pas être vide."})
@@ -153,36 +189,28 @@ def handle_envoyer_a_muriel(data):
 
     octets_count = len(texte.encode('utf-8'))
     if octets_count > MAX_OCTETS:
-        emit('erreur', {"message": f"Message trop long ({octets_count} octets). Limite RSA 2048: {MAX_OCTETS} octets."})
+        emit('erreur', {"message": f"Message trop long ({octets_count} octets). Limite texte direct: {MAX_OCTETS} octets."})
         return
 
     config = charger_configuration()
     chemin_cle_muriel = config.get("chemin_cle_muriel", "muriel_publique.pem")
     url_serveur = config.get("serveur_muriel_url", "").strip().rstrip("/")
 
-    # Vérification présence de la clé publique de Muriel
     if not os.path.exists(chemin_cle_muriel):
-        emit('erreur', {"message": f"Fichier de clé publique de Muriel introuvable ({chemin_cle_muriel}). Veuillez l'importer dans la configuration."})
+        emit('erreur', {"message": f"Clé publique de Muriel introuvable. Veuillez l'importer dans Configuration."})
         return
 
-    # Vérification URL
-    if not url_serveur or "abcd-1234" in url_serveur:
-        emit('erreur', {"message": "L'adresse du serveur de Muriel n'est pas configurée (remplacez l'adresse d'exemple dans Configuration)."})
+    if not url_serveur or "abcd-1234" in url_serveur or not url_serveur.startswith(("http://", "https://")):
+        emit('erreur', {"message": "Adresse du serveur de Muriel non configurée ou invalide."})
         return
 
-    if not url_serveur.startswith(("http://", "https://")):
-        emit('erreur', {"message": "L'adresse du serveur distant de Muriel doit débuter par http:// ou https://"})
-        return
-
-    # 1. Chiffrement avec la clé publique de Muriel
     try:
         muriel_pub = rsa_outils.charger_publique(chemin_cle_muriel)
         chiffre_b64 = rsa_outils.chiffrer(texte, muriel_pub)
     except Exception as e:
-        emit('erreur', {"message": f"Erreur lors du chiffrement RSA : {str(e)}"})
+        emit('erreur', {"message": f"Erreur de chiffrement RSA : {str(e)}"})
         return
 
-    # 2. Transmission réseau vers la machine distante de Muriel
     cible_url = url_serveur + "/envoyer/muriel"
     statut_envoi = "envoyé"
     erreur_transmission = None
@@ -190,7 +218,7 @@ def handle_envoyer_a_muriel(data):
     try:
         rep = requests.post(
             cible_url,
-            json={"message": chiffre_b64},
+            json={"type": "texte", "message": chiffre_b64},
             headers=HEADERS,
             timeout=10
         )
@@ -199,11 +227,11 @@ def handle_envoyer_a_muriel(data):
         statut_envoi = "echec_reseau"
         erreur_transmission = str(e)
 
-    # 3. Sauvegarde dans l'historique local de Roxane
     msg_obj = {
         "id": len(messages_historique) + 1,
         "auteur": "Roxane",
         "destinataire": "Muriel",
+        "type": "texte",
         "message_clair": texte,
         "message_chiffre": chiffre_b64,
         "timestamp": time.strftime("%H:%M:%S"),
@@ -217,6 +245,95 @@ def handle_envoyer_a_muriel(data):
     if erreur_transmission:
         emit('avertissement', {"message": f"Message chiffré mais non transmis à Muriel : {erreur_transmission}"})
 
+@socketio.on('envoyer_fichier_a_muriel')
+def handle_envoyer_fichier_a_muriel(data):
+    """
+    Envoi d'un fichier/photo : Chiffrement hybride RSA-2048 + AES-256-GCM.
+    data = { nom_fichier, type_mime, contenu_b64 }
+    """
+    nom_fichier = data.get("nom_fichier", "fichier")
+    type_mime = data.get("type_mime", "application/octet-stream")
+    contenu_b64 = data.get("contenu_b64", "")
+
+    if not contenu_b64:
+        emit('erreur', {"message": "Fichier vide ou corrompu."})
+        return
+
+    try:
+        fichier_bytes = base64.b64decode(contenu_b64)
+    except Exception as e:
+        emit('erreur', {"message": f"Erreur de lecture du fichier : {e}"})
+        return
+
+    config = charger_configuration()
+    chemin_cle_muriel = config.get("chemin_cle_muriel", "muriel_publique.pem")
+    url_serveur = config.get("serveur_muriel_url", "").strip().rstrip("/")
+
+    if not os.path.exists(chemin_cle_muriel):
+        emit('erreur', {"message": "Clé publique de Muriel introuvable. Veuillez l'importer dans Configuration."})
+        return
+
+    if not url_serveur or "abcd-1234" in url_serveur or not url_serveur.startswith(("http://", "https://")):
+        emit('erreur', {"message": "Adresse du serveur de Muriel non configurée ou invalide."})
+        return
+
+    # 1. Chiffrement hybride AES-256-GCM + RSA-2048
+    try:
+        muriel_pub = rsa_outils.charger_publique(chemin_cle_muriel)
+        paquet_chiffre = rsa_outils.chiffrer_fichier(fichier_bytes, muriel_pub)
+    except Exception as e:
+        emit('erreur', {"message": f"Erreur lors du chiffrement hybride du fichier : {e}"})
+        return
+
+    # 2. Transmission réseau
+    payload = {
+        "type": "fichier",
+        "nom_fichier": nom_fichier,
+        "type_mime": type_mime,
+        "cle_aes_chiffree": paquet_chiffre["cle_aes_chiffree"],
+        "nonce": paquet_chiffre["nonce"],
+        "donnees_chiffrees": paquet_chiffre["donnees_chiffrees"]
+    }
+
+    cible_url = url_serveur + "/envoyer/muriel"
+    statut_envoi = "envoyé"
+    erreur_transmission = None
+
+    try:
+        rep = requests.post(
+            cible_url,
+            json=payload,
+            headers=HEADERS,
+            timeout=25
+        )
+        rep.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        statut_envoi = "echec_reseau"
+        erreur_transmission = str(e)
+
+    # 3. Stockage local
+    data_url = f"data:{type_mime};base64,{contenu_b64}"
+    msg_obj = {
+        "id": len(messages_historique) + 1,
+        "auteur": "Roxane",
+        "destinataire": "Muriel",
+        "type": "fichier",
+        "nom_fichier": nom_fichier,
+        "type_mime": type_mime,
+        "taille": len(fichier_bytes),
+        "data_url": data_url,
+        "message_chiffre": f"[Clé AES chiffrée RSA-2048]: {paquet_chiffre['cle_aes_chiffree'][:40]}... (Payload AES-256-GCM)",
+        "timestamp": time.strftime("%H:%M:%S"),
+        "statut": statut_envoi,
+        "erreur": erreur_transmission,
+        "direction": "sortant"
+    }
+    messages_historique.append(msg_obj)
+    emit('nouveau_message', msg_obj)
+
+    if erreur_transmission:
+        emit('avertissement', {"message": f"Fichier chiffré mais non transmis à Muriel : {erreur_transmission}"})
+
 @socketio.on('reinitialiser_chat')
 def handle_reinitialiser():
     messages_historique.clear()
@@ -224,7 +341,7 @@ def handle_reinitialiser():
 
 if __name__ == '__main__':
     print("===============================================================")
-    print("  Plateforme Web Anonyme RSA - Poste de ROXANE")
+    print("  Plateforme Web Anonyme RSA + Fichiers - Poste de ROXANE")
     print("  Application disponible sur : http://127.0.0.1:5000")
     print("===============================================================")
     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)

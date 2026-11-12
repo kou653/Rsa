@@ -180,11 +180,15 @@
                     <div class="chat-composer-wrapper">
                         <div class="composer-toolbar">
                             <span class="composer-info">
-                                Chiffrement automatique avec la clé publique de <strong>Muriel</strong>
+                                Chiffrement auto avec clé publique de <strong>Muriel</strong> (Texte: RSA-2048 | Fichier: Hybride RSA+AES-256)
                             </span>
                             <span class="byte-counter" id="byte-counter">0 / 190 octets</span>
                         </div>
                         <div class="chat-input-bar">
+                            <input type="file" id="file-input" style="display: none;" onchange="gererFichierChoisi(event)">
+                            <button class="btn-attach" onclick="document.getElementById('file-input').click()" title="Joindre un fichier chiffré">
+                                <i class="fa-solid fa-paperclip"></i>
+                            </button>
                             <textarea 
                                 id="message-input" 
                                 placeholder="Tapez votre message pour Muriel..." 
